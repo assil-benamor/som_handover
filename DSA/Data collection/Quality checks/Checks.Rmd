@@ -1,0 +1,403 @@
+---
+title: "DSA 2021 Checks"
+author: "Assil BEN-AMOR"
+date : December 23, 2021
+output: 
+  html_document:
+    code_folding: "none"
+    toc: true
+    toc_float: true
+---
+
+```{r setup, include=FALSE}
+rm(list = ls());cat('\014')
+
+if (!require(pacman)) install.packages(pacman)
+
+pacman::p_load(readxl,
+              rio,
+              tidyverse,
+              ggplot2)
+
+options(scipen = 999)
+
+options(dplyr.summarise.inform = FALSE)
+
+file.names = list()
+
+# file.names$data_1 = "input/data/DSA2021_Galmudug_CleanData.xlsx"
+# file.names$data_2 = "input/data/DSA2021_Puntland_CleanData.xlsx"
+# file.names$data_3 = "input/data/DSA2021_Somaliland_CleanData.xlsx"
+file.names$tool = "input/tool/REACH_SOM_DSA_Survey_Tool_v7.xlsx"
+
+
+file.names$data_1 = "/Users/mac/One drive/ACTED/Ahmed MAHAMOUD - 8_HQ-Validation/DSA2021_Galmudug_CleanData.xlsx"
+file.names$data_2 = "/Users/mac/One drive/ACTED/Ahmed MAHAMOUD - 8_HQ-Validation/DSA2021_Puntland_CleanData.xlsx"
+file.names$data_3 = "/Users/mac/One drive/ACTED/Ahmed MAHAMOUD - 8_HQ-Validation/DSA2021_Somaliland_CleanData.xlsx"
+
+data_Galmudug <-  read_xlsx(file.names$data_1,
+                            guess_max = 50000,
+                            na = c("NA","#N/A",""," "),
+                            sheet = "Clean Data")
+
+data_Puntland <-  read_xlsx(file.names$data_2,
+                            guess_max = 50000,
+                            na = c("NA","#N/A",""," "),
+                            sheet = "Clean Data")
+
+data_Somaliland <-  read_xlsx(file.names$data_3,
+                            guess_max = 50000,
+                            na = c("NA","#N/A",""," "),
+                            sheet = "Clean Data")
+
+# names(data_Galmudug) <- gsub("^X_","_",names(data_Galmudug))
+# names(data_Puntland) <- gsub("^X_","_",names(data_Puntland))
+names(data_Puntland) <- gsub("/",".",names(data_Puntland))
+names(data_Somaliland) <- gsub("/",".",names(data_Somaliland))
+
+
+names(data_Galmudug) [! names(data_Galmudug)  %in% names(data_Somaliland)]
+names(data_Somaliland) [! names(data_Somaliland)  %in% names(data_Galmudug)]
+
+
+data <- do.call("rbind",list(data_Galmudug,data_Puntland,data_Somaliland)) %>% setNames(
+   gsub("/",".",colnames(.))
+)
+
+names(data) <- gsub("^(X_|_)","",names(data))
+
+
+questions <- read_excel(file.names$tool, sheet="survey", col_types="text") %>% 
+  filter(!is.na(name)) %>% 
+  mutate(q.type=as.character(lapply(type, function(x) str_split(x, " ")[[1]][1])),
+         list_name=as.character(lapply(type, function(x) str_split(x, " ")[[1]][2])),
+         list_name=ifelse(str_starts(type, "select_"), list_name, NA))
+
+choices <- read_excel(file.names$tool, sheet="choices", col_types="text") %>% 
+  filter(!is.na(list_name)) %>% select(c(list_name, name, "label::English (en)")) %>% 
+  distinct()
+
+listOfNumericQuestions <- questions %>% filter(type %in% c("integer","numeric","calculate")) %>% pull(name)
+
+numericQuestions_index <- which(colnames(data) %in% listOfNumericQuestions)
+data[numericQuestions_index] <- sapply(data[numericQuestions_index],as.numeric)
+
+multipleSelectQuestions <- grep(pattern="\\.", colnames(data))
+data[multipleSelectQuestions] <- sapply(data[multipleSelectQuestions],as.numeric)
+
+
+generate_from_binaries <- function(data,select_multiple_questions) {
+  
+  do.call("cbind",map(select_multiple_questions,function(question_name,data) {
+    df <- data %>% select(grep(paste0("^",question_name,"\\."), names(data))) 
+    colnames(df) <- gsub(paste0(question_name,"\\."),"",colnames(df))
+    map2_df(df, names(df), ~  replace(.x, .x==1, .y) %>% replace(. == 0, NA)) %>% 
+      unite(!!sym(question_name),names(df),remove=TRUE,na.rm=TRUE,sep=" ") %>% 
+      as.data.frame() %>% 
+      mutate_all(list(~na_if(.,""))) 
+  },data)) 
+  
+}
+
+data <- sjmisc::replace_columns(data, 
+                        generate_from_binaries(data,
+                                               questions %>% filter(grepl("^select_multiple",type)) %>%
+                                                 pull(name))) 
+
+colorize <- function(x, color) {
+  if (knitr::is_latex_output()) {
+    sprintf("\\textcolor{%s}{%s}", color, x)
+  } else if (knitr::is_html_output()) {
+    sprintf("<span style='color: %s; font-size:18.0pt;'>%s</span>", color,
+            x)
+  } else x
+}
+
+
+```
+
+# **General checks**
+
+## 1- Select multiple questions check
+
+<p style="color:blue"> Checking if all select multiple questions/choices columns are present in the dataset </p>
+
+```{r results='asis'}
+
+sm_list <- questions %>% filter(q.type=="select_multiple") %>% select(name,list_name)
+
+if(sum(!unlist(map2(sm_list[["name"]],sm_list[["list_name"]],
+~paste0(.x,".",choices %>% filter(list_name == .y) %>% pull(name))
+)) %in% colnames(data),na.rm = T) > 0) {
+  colnames(data)[!unlist(map2(sm_list[["name"]],sm_list[["list_name"]],
+~paste0(.x,".",choices %>% filter(list_name == .y) %>% pull(name))
+)) %in% colnames(data)] %>% as.data.frame() %>% knitr::kable()
+
+} else {
+  colorize("Check passed ✓","green")
+}
+  
+  
+```
+
+## 2- Unique UUIDs
+
+<p style="color:blue"> Checking of duplicate surveys </p>
+
+```{r results='asis'}
+
+if (sum (duplicated(data$uuid),na.rm = T) > 0 ) {
+  data[duplicated(data$uuid),] %>% head() %>% select(idp_code,uuid) %>% knitr::kable()
+} else {
+    colorize("Check passed ✓","green")
+}
+
+```
+
+## 3- NAs per row
+
+<p style="color:blue"> Number of NAs per row </p>
+
+```{r}
+hist(rowSums(is.na(data)),
+  xlab = "Number of NA per row",
+  main = "NAs per row",
+  breaks = sqrt(nrow(data))
+) 
+```
+
+<p style="color:blue"> I would recommend checking rows with more than 280 NAs </p>
+
+```{r}
+
+data$nb_na = rowSums(is.na(data))
+data %>% filter(nb_na >= 280 ) %>% select(idp_code,uuid,nb_na) %>% head() %>% knitr::kable()
+
+```
+
+# **Numerical checks**
+
+## 1- Outliers checks
+
+<p style="color:blue"> Boxplots of numerical questions </p>
+
+```{r echo=F}
+numerical_questions <- questions %>% filter(type %in% c("integer","calculate")) %>% pull(name) %>% .[6:26] %>% .[!. %in% c("check_nb_all_selected","check_nb_none_selected")]
+
+data_2 <- data %>% mutate_at(numerical_questions,as.numeric)
+```
+
+
+```{r, fig.show="hold", out.width="50%", echo=F}
+par(mar = c(4, 4, 2, 2))
+boxplot(data_2[[numerical_questions[1]]],
+  main = numerical_questions[1]
+)
+boxplot(data_2[[numerical_questions[2]]],
+  main = numerical_questions[2]
+)
+```
+
+
+```{r, fig.show="hold", out.width="50%", echo=F}
+par(mar = c(4, 4, 2, 2))
+boxplot(data_2[[numerical_questions[3]]],
+  main = numerical_questions[3]
+)
+boxplot(data_2[[numerical_questions[4]]],
+  main = numerical_questions[4]
+)
+```
+
+
+```{r, fig.show="hold", out.width="50%", echo=F}
+par(mar = c(4, 4, 2, 2))
+boxplot(data_2[[numerical_questions[5]]],
+  main = numerical_questions[5]
+)
+boxplot(data_2[[numerical_questions[6]]],
+  main = numerical_questions[6]
+)
+```
+
+
+```{r, fig.show="hold", out.width="50%", echo=F}
+par(mar = c(4, 4, 2, 2))
+boxplot(data_2[[numerical_questions[7]]],
+  main = numerical_questions[7]
+)
+boxplot(data_2[[numerical_questions[8]]],
+  main = numerical_questions[8]
+)
+```
+
+
+```{r, fig.show="hold", out.width="50%", echo=F}
+par(mar = c(4, 4, 2, 2))
+boxplot(data_2[[numerical_questions[9]]],
+  main = numerical_questions[9]
+)
+boxplot(data_2[[numerical_questions[10]]],
+  main = numerical_questions[10]
+)
+```
+
+
+```{r, fig.show="hold", out.width="50%", echo=F}
+par(mar = c(4, 4, 2, 2))
+boxplot(data_2[[numerical_questions[11]]],
+  main = numerical_questions[11]
+)
+boxplot(data_2[[numerical_questions[12]]],
+  main = numerical_questions[12]
+)
+```
+
+```{r, fig.show="hold", out.width="50%", echo=F}
+par(mar = c(4, 4, 2, 2))
+boxplot(data_2[[numerical_questions[13]]],
+  main = numerical_questions[13]
+)
+boxplot(data_2[[numerical_questions[14]]],
+  main = numerical_questions[14]
+)
+```
+
+
+```{r, fig.show="hold", out.width="50%", echo=F}
+par(mar = c(4, 4, 2, 2))
+boxplot(data_2[[numerical_questions[15]]],
+  main = numerical_questions[15]
+)
+boxplot(data_2[[numerical_questions[16]]],
+  main = numerical_questions[16]
+)
+```
+
+
+```{r, fig.show="hold", out.width="50%", echo=F}
+par(mar = c(4, 4, 2, 2))
+boxplot(data_2[[numerical_questions[17]]],
+  main = numerical_questions[17]
+)
+boxplot(data_2[[numerical_questions[18]]],
+  main = numerical_questions[18]
+)
+```
+
+## 2- 999 values
+<p style="color:blue"> 999 should be recoded to NA </p>
+
+```{r results='asis'}
+nb_999 <- ((data %>% mutate_all(as.character)) == "999") %>% as.data.frame() %>% summarise(across(.cols = everything(), sum, na.rm =T)) 
+if (rowSums(nb_999)>0){
+  nb_999 %>% select(names(nb_999)[nb_999[1,] > 0]) %>% t() %>% head() %>% knitr::kable()
+} else {
+    colorize("Check passed ✓","green")
+}
+```
+
+
+
+# **DSA speceic checks**
+
+## 1 - Ki_role_other 
+
+<p style="color:blue"> Translate and recode options </p>
+
+```{r results='asis'}
+if (data %>% filter(!is.na(ki_role_other),ki_role=="other") %>% nrow()>0){
+  data %>% filter(!is.na(ki_role_other),ki_role=="other") %>% select(ki_role,ki_role_other) %>% head() %>% knitr::kable()
+} else {
+  colorize("Check passed ✓","green")
+}
+```
+
+## 2 - nb_shelters 
+<p style="color:blue"> cccm_populationestimates_shelters < 15 </p>
+
+```{r results='asis'}
+if (data %>% filter(cccm_populationestimates_shelters<15) %>% nrow()>0){
+  data %>% filter(cccm_populationestimates_shelters<15) %>% select(idp_code,cccm_populationestimates_shelters) %>% head() %>% knitr::kable()
+} else {
+  colorize("Check passed ✓","green")
+}
+```
+
+## 3 - nb_families 
+<p style="color:blue"> cccm_populationestimates_families < 15 </p>
+
+```{r results='asis'}
+if (data %>% filter(cccm_populationestimates_families<15) %>% nrow()>0){
+  data %>% filter(cccm_populationestimates_families<15) %>% select(idp_code,cccm_populationestimates_families) %>% head() %>% knitr::kable()
+} else {
+  colorize("Check passed ✓","green")
+}
+```
+
+## 4 - nb_individuals 
+<p style="color:blue"> cccm_populationestimates_individuals < 15 </p>
+
+```{r results='asis'}
+if (data %>% filter(cccm_populationestimates_individuals<15) %>% nrow()>0){
+  data %>% filter(cccm_populationestimates_individuals<15) %>% select(idp_code,cccm_populationestimates_individuals) %>% head() %>% knitr::kable()
+} else {
+  colorize("Check passed ✓","green")
+}
+```
+
+## 5 - women_comm_rep
+<p style="color:blue"> ki_role == women_comm_rep & women_comm_rep not selected in cccm_committees </p>
+
+```{r results='asis'}
+if (data %>% filter(ki_role == "women_comm_rep"
+                & cccm_committees.women_committee==0) %>% nrow()>0){
+  data %>% filter(ki_role == "women_comm_rep"
+                & cccm_committees.women_committee==0) %>% select(idp_code) %>% head() %>% knitr::kable()
+} else {
+  colorize("Check passed ✓","green")
+}
+```
+
+
+
+## 5 - evictions_landowner_other
+<p style="color:blue"> Translate and recode options </p>
+
+```{r results='asis'}
+if (data %>% filter(!is.na(evictions_landowner_other),evictions_landowner=="other") %>% nrow()>0){
+  data %>% filter(!is.na(evictions_landowner_other),evictions_landowner=="other") %>% select(evictions_landowner,evictions_landowner_other) %>% head() %>% knitr::kable()
+} else {
+  colorize("Check passed ✓","green")
+}
+```
+
+## 6 - families and individuals
+<p style="color:blue"> Checking number of familites against the number of individuals </p>
+
+
+```{r results='asis'}
+if (data %>% mutate(check_fam = cccm_populationestimates_individuals <= cccm_populationestimates_families)  %>%
+  filter(check_fam == T) %>% nrow()>0){
+  data %>% mutate(check_fam = cccm_populationestimates_individuals <= cccm_populationestimates_families)  %>%
+  filter(check_fam == T) %>% select(idp_code,uuid) %>% head() %>% knitr::kable()
+} else {
+  colorize("Check passed ✓","green")
+}
+```
+
+
+## 6 - Number of surveys / site
+<p style="color:blue"> Checking high/low number of surveys collected per idp site </p>
+
+```{r results='asis'}
+
+data_3 <- data %>% group_by(idp_code) %>% summarise(n=n()) %>% filter(n<3 | n>6) %>% arrange(desc(n))
+
+if (data_3 %>% nrow()>0){
+  rbind(data_3 %>% head(5),data_3 %>% tail(5)) %>% select(idp_code,collected_surveys=n) %>% knitr::kable()
+} else {
+  colorize("Check passed ✓","green")
+}
+```
+

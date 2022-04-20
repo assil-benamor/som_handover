@@ -79,10 +79,10 @@ Input data are not included in this repo for data protection purposes.
 <!-- ROADMAP -->
 ## Structure
 
-- [ ] DSA
-    - [ ] Pre Data collection
-    - [ ] Data collection
-    - [ ] Data analysis
+- [x] DSA
+    - [x] Pre Data collection
+    - [x] Data collection
+    - [x] Data analysis
 
 - [ ] JMCNA
 - [ ] H2R
