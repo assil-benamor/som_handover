@@ -84,7 +84,11 @@ Input data are not included in this repo for data protection purposes.
     - [x] Data collection
     - [x] Data analysis
 
-- [ ] JMCNA
+- [x] JMCNA
+   - [x] Analysis
+   - [x] PIN files
+   - [x] MSNI
+   
 - [ ] H2R
     - [ ] Aggregation
 
