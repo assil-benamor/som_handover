@@ -34,8 +34,12 @@ Input data are not included in this repo for data protection purposes.
 
 <p align="right">(<a href="#top">back to top</a>)</p>
 
+## Project structure map
 
-### Built With
+* [Link](https://htmlpreview.github.io/?https://github.com/lilos404/som_handover_map/blob/main/Handover%20SOM-d7fbd02a72150451fad82cdc0abbac67.html)
+
+
+## Built With
 
 * [R](https://www.r-project.org/)
 * [Python](https://www.python.org/)
@@ -89,9 +93,9 @@ Input data are not included in this repo for data protection purposes.
    - [x] PIN files
    - [x] MSNI
    
-- [ ] H2R
+- [x] H2R
     - [x] Aggregation
-    - [ ] Analysis
+    - [x] Analysis
 
  
     
