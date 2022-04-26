@@ -90,7 +90,8 @@ Input data are not included in this repo for data protection purposes.
    - [x] MSNI
    
 - [ ] H2R
-    - [ ] Aggregation
+    - [x] Aggregation
+    - [ ] Analysis
 
  
     
